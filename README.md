@@ -14,13 +14,13 @@ Fixes and a small daemon that make the ASUS Zenbook Duo 2026 (UX8407AA, Intel Pa
 - No ghost or flickering cursor on the top screen
 - 10-bit colour on both panels
 - Lid close with the keyboard docked: the laptop stays asleep
-- A visible boot menu for dual boot with Windows
 - A power-saver profile that really saves power, and lower idle power
 
 Optional (run by name, not part of `all`):
 
 - **Battery charge limit:** charge to 80% only, with a button in the Omarchy bar for a full charge during the next 24 hours, like MyASUS "Battery care mode" ([`charge-limit`](#charge-limit-optional-not-part-of-all))
 - US International keyboard layout with `'` + `c` = `ç` ([`keyboard-intl`](#keyboard-intl-optional-not-part-of-all))
+- **Visible boot menu:** always show the Limine menu for 4 s instead of Omarchy's hidden one, handy for dual boot with Windows ([`limine-menu`](#limine-menu-optional-not-part-of-all))
 
 > **Based on [burakgon/zenbook-duo-2026-linux](https://github.com/burakgon/zenbook-duo-2026-linux).** Almost all of the hardware work here comes from burakgon's project: the research, the kernel patches, the patched keyboard driver and the fixes for sensors, touchpad, cursor and sleep. His project targets KDE Plasma. This one adapts his fixes to Omarchy (Arch + Hyprland), replaces the KDE parts with Hyprland equivalents, and adds a few changes of its own. If his work helped you, go give his repo a star. See [Credits](#credits) for details.
 
@@ -38,6 +38,7 @@ cd zenbook-duo-2026-omarchy
 ./install.sh list          # show the steps
 ./install.sh all           # run them all, or name steps: ./install.sh packages raydium ...
 ./install.sh charge-limit  # optional: 80% battery charge limit + bar button
+./install.sh limine-menu   # optional: always show the boot menu (dual boot)
 ```
 
 Tip: take a restore point first with `omarchy-snapshot create`. It appears in the Limine boot menu; boot it and run `omarchy-snapshot restore` to go back.
@@ -68,7 +69,7 @@ Every step is safe to run again. Steps that change the system use `sudo`.
 | Battery charge limit 80% + 24 h full charge from the bar | ✅ optional | `charge-limit` |
 | CPU power limits per profile (Windows DTT values) | ✅ Omarchy default (thermald) | — |
 | Keyboard over Bluetooth | ✅ after pairing | [manual](#manual-steps) |
-| Boot menu with Windows entry | ✅ | `limine-menu` |
+| Boot menu always visible (dual boot with Windows) | ✅ optional | `limine-menu` |
 | Disk password screen (Plymouth) upside down at power-on | ✅ fixed | `boot-orientation` |
 | Detached (Bluetooth) keyboard at the disk password | ❌ by design | [known issues](#known-issues) |
 | Bottom screen after powering on with keyboard on it | ✅ fixed | `edp2-xe` |
@@ -124,11 +125,6 @@ State is kept in `~/.local/state/zenbook-duo/`.
 
 ### `brightness`
 Adds `xe.enable_dpcd_backlight=1` to `/etc/default/limine` (backup `limine.bak.zenbook-duo`) and rebuilds the boot image. The OLED panels ignore PWM, so without this the brightness keys and menu do nothing visible.
-
-### `limine-menu`
-- Omarchy sets `quiet: yes` in `/boot/limine.conf`, which hides the boot menu unless you press a key. This step sets `quiet: no` and `timeout: 4`, with a backup at `limine.conf.bak.zenbook-duo`.
-- Omarchy only adds `quiet` when it's missing, so the change stays.
-- Add the Windows entry with `sudo limine-scan`.
 
 ### `hid-asus`
 - **Problem:** the detachable keyboard (USB `0b05:1cd7`, Bluetooth `0b05:1cd8`) isn't in the kernel's `hid-asus` table. It falls back to `hid-generic`, so:
@@ -217,6 +213,13 @@ Adds `xe.enable_dpcd_backlight=1` to `/etc/default/limine` (backup `limine.bak.z
 - **Check:** `grep -l '^on$' /sys/bus/pci/devices/*/power/control` should list only the sensor hub, Wi-Fi, NVMe and the VMD controller/port.
 - If the Bluetooth keyboard starts to lag or reconnect slowly, remove `0xe476|` from the rule.
 
+### `limine-menu` (optional, not part of `all`)
+- Omarchy sets `quiet: yes` in `/boot/limine.conf`, which hides the boot menu unless you press a key during the timeout. This step sets `quiet: no` and `timeout: 4`, with a backup at `limine.conf.bak.zenbook-duo`.
+- Useful when you dual boot, or want to pick a snapshot without guessing when to press a key. Without it, the Windows entry and snapshots are still there: hold a key while booting to show the menu.
+- Omarchy only adds `quiet` when it's missing, so the change stays across updates and `limine-update`.
+- Add the Windows entry with `sudo limine-scan`.
+- **Undo:** `sudo cp /boot/limine.conf.bak.zenbook-duo /boot/limine.conf`, or set `quiet: yes` again.
+
 ### `keyboard-intl` (optional, not part of `all`)
 US International layout, plus an `~/.XCompose` rule so `'` + `c` gives `ç` instead of `ć`. Useful for writing Portuguese on a US keyboard.
 
@@ -246,7 +249,7 @@ Replaces MyASUS "Battery care mode" + "Instant full charge".
    - Press F11 / the Bluetooth key for pairing mode. The keyboard gets a new address each time.
    - Run `bluetoothctl scan le`, then `pair`, `trust`, `connect` with that address. Type the passkey on the keyboard.
    - **If you dual boot,** using the keyboard in Windows can replace the Linux pairing. If it stops reconnecting after a Windows session, run `bluetoothctl remove <addr>` and pair again.
-2. **Windows boot entry** (dual boot): `sudo limine-scan` → "Windows Boot Manager". BitLocker may ask for its recovery key on the first boot.
+2. **Windows boot entry** (dual boot): `sudo limine-scan` → "Windows Boot Manager". BitLocker may ask for its recovery key on the first boot. Run the optional [`limine-menu`](#limine-menu-optional-not-part-of-all) step too, so the menu shows without pressing a key.
 
 ## Known issues
 

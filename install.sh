@@ -13,8 +13,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 F="$HERE/files"
 
 # "all" runs STEPS; OPTIONAL steps only run when named.
-STEPS=(packages raydium ish-firmware hyprland brightness boot-orientation limine-menu hid-asus edp2-xe touchpad-palm psr-et-off dsc-10bit kbd-lid-wake power-profile-sync runtime-pm)
-OPTIONAL=(keyboard-intl charge-limit)
+STEPS=(packages raydium ish-firmware hyprland brightness boot-orientation hid-asus edp2-xe touchpad-palm psr-et-off dsc-10bit kbd-lid-wake power-profile-sync runtime-pm)
+OPTIONAL=(keyboard-intl charge-limit limine-menu)
 
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -155,7 +155,7 @@ step_boot_orientation() {
 }
 
 step_limine_menu() {
-	say "limine-menu: always show the boot menu (4 s) so Windows can be picked"
+	say "limine-menu (optional): always show the boot menu (4 s) so Windows can be picked"
 	local conf=/boot/limine.conf
 	sudo cp "$conf" "$conf.bak.zenbook-duo"
 	if sudo grep -qE '^\s*quiet:' "$conf"; then

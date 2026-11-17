@@ -315,6 +315,8 @@ This project would not exist without **[burakgon/zenbook-duo-2026-linux](https:/
 
 Written for this project: the Hyprland side (`zenbook-duo.lua`, the `zenbook-duo-rotate` daemon for rotation, keyboard dock and brightness sync), `install.sh`, the Omarchy-kernel `xe` rebuild and its safety check, the Fn-lock change, and the battery charge limit with its bar widget (`charge-limit`, first written on a Zenbook S14).
 
+I would also like to thank the [Omarchy](https://omarchy.org) team ([GitHub](https://github.com/omacom/omarchy)), especially [DHH](https://dhh.dk), for bringing back the joy of tinkering with a new OS.
+
 - The ISH firmware belongs to ASUS and Intel and is downloaded from ASUS at install time.
 
 ## License

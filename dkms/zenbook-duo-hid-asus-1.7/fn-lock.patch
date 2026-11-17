@@ -1,0 +1,92 @@
+diff -ru a/src/7.2/hid-asus.c b/src/7.2/hid-asus.c
+--- a/src/7.2/hid-asus.c
++++ b/src/7.2/hid-asus.c
+@@ -101,6 +101,15 @@
+ #define QUIRK_HID_FN_LOCK		BIT(14)
+ #define QUIRK_ZENBOOK_DUO_KBD		BIT(20)
+ 
++/*
++ * Zenbook Duo Fn-lock, shared by the USB and Bluetooth links of the keyboard:
++ * 1 = F1-F12 without Fn (media keys with Fn), 0 = media keys without Fn.
++ * Fn+Esc toggles it; each (re)connect and resume sends the current value.
++ */
++static bool zenbook_duo_fn_lock = true;
++module_param(zenbook_duo_fn_lock, bool, 0644);
++MODULE_PARM_DESC(zenbook_duo_fn_lock, "Zenbook Duo keyboard: F1-F12 are the primary function of the top row (Fn+Esc toggles)");
++
+ #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
+ 						 QUIRK_NO_INIT_REPORTS | \
+ 						 QUIRK_NO_CONSUMER_USAGES)
+@@ -477,7 +486,14 @@
+ 		case KEY_KBDILLUMTOGGLE:
+ 			return !asus_hid_event(ASUS_EV_BRTTOGGLE);
+ 		case KEY_FN_ESC:
+-			if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
++			if ((drvdata->quirks & QUIRK_ZENBOOK_DUO_KBD) && drvdata->duo_init_ready) {
++				WRITE_ONCE(zenbook_duo_fn_lock, !READ_ONCE(zenbook_duo_fn_lock));
++				ret = asus_kbd_fn_lock_set(drvdata, READ_ONCE(zenbook_duo_fn_lock));
++				if (ret) {
++					hid_err(hdev, "Error while toggling FN lock: %d\n", ret);
++					return ret;
++				}
++			} else if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+ 				ret = asus_kbd_fn_lock_set(drvdata, !drvdata->fn_lock);
+ 				if (ret) {
+ 					hid_err(hdev, "Error while toggling FN lock: %d\n", ret);
+@@ -1415,8 +1431,8 @@
+ 						    struct asus_drvdata, duo_init_work);
+ 
+ 	asus_kbd_init(drvdata->hdev, FEATURE_KBD_REPORT_ID);
+-	/* Fn-lock 0 = ASUS hotkeys on the top row (USB defaults to F-keys) */
+-	asus_kbd_set_fn_lock(drvdata->hdev, false);
++	/* Fn-lock 1 = F1-F12 on the top row, 0 = ASUS hotkeys (zenbook_duo_fn_lock) */
++	asus_kbd_set_fn_lock(drvdata->hdev, READ_ONCE(zenbook_duo_fn_lock));
+ 	if (++drvdata->duo_init_runs < 2)
+ 		schedule_delayed_work(&drvdata->duo_init_work, msecs_to_jiffies(3000));
+ }
+diff -ru a/src/7.3/hid-asus.c b/src/7.3/hid-asus.c
+--- a/src/7.3/hid-asus.c
++++ b/src/7.3/hid-asus.c
+@@ -100,6 +100,15 @@
+ #define QUIRK_ROG_ALLY_XPAD		BIT(13)
+ #define QUIRK_HID_FN_LOCK		BIT(14)
+ #define QUIRK_ZENBOOK_DUO_KBD		BIT(20)
++
++/*
++ * Zenbook Duo Fn-lock, shared by the USB and Bluetooth links of the keyboard:
++ * 1 = F1-F12 without Fn (media keys with Fn), 0 = media keys without Fn.
++ * Fn+Esc toggles it; each (re)connect and resume sends the current value.
++ */
++static bool zenbook_duo_fn_lock = true;
++module_param(zenbook_duo_fn_lock, bool, 0644);
++MODULE_PARM_DESC(zenbook_duo_fn_lock, "Zenbook Duo keyboard: F1-F12 are the primary function of the top row (Fn+Esc toggles)");
+ #define QUIRK_FILTER_CAMERA_COMPANION	BIT(15)
+ 
+ #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
+@@ -478,7 +487,14 @@
+ 		case KEY_KBDILLUMTOGGLE:
+ 			return !asus_hid_event(ASUS_EV_BRTTOGGLE);
+ 		case KEY_FN_ESC:
+-			if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
++			if ((drvdata->quirks & QUIRK_ZENBOOK_DUO_KBD) && drvdata->duo_init_ready) {
++				WRITE_ONCE(zenbook_duo_fn_lock, !READ_ONCE(zenbook_duo_fn_lock));
++				ret = asus_kbd_fn_lock_set(drvdata, READ_ONCE(zenbook_duo_fn_lock));
++				if (ret) {
++					hid_err(hdev, "Error while toggling FN lock: %d\n", ret);
++					return ret;
++				}
++			} else if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
+ 				ret = asus_kbd_fn_lock_set(drvdata, !drvdata->fn_lock);
+ 				if (ret) {
+ 					hid_err(hdev, "Error while toggling FN lock: %d\n", ret);
+@@ -1428,8 +1444,8 @@
+ 						    struct asus_drvdata, duo_init_work);
+ 
+ 	asus_kbd_init(drvdata->hdev, FEATURE_KBD_REPORT_ID);
+-	/* Fn-lock 0 = ASUS hotkeys on the top row (USB defaults to F-keys) */
+-	asus_kbd_set_fn_lock(drvdata->hdev, false);
++	/* Fn-lock 1 = F1-F12 on the top row, 0 = ASUS hotkeys (zenbook_duo_fn_lock) */
++	asus_kbd_set_fn_lock(drvdata->hdev, READ_ONCE(zenbook_duo_fn_lock));
+ 	if (++drvdata->duo_init_runs < 2)
+ 		schedule_delayed_work(&drvdata->duo_init_work, msecs_to_jiffies(3000));
+ }

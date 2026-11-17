@@ -1,0 +1,233 @@
+#!/bin/bash
+# Zenbook Duo UX8407AA auto-rotation and keyboard-dock handling for Hyprland.
+#
+# Follows iio-sensor-proxy's accelerometer orientation (via monitor-sensor) and
+# whether the keyboard rests on the bottom screen (it then appears on USB as
+# 0b05:1cd7; off the screen it uses Bluetooth), stores both in
+# ~/.local/state/zenbook-duo/ and re-applies ~/.config/hypr/zenbook-duo.lua,
+# which holds the actual monitor/touch layouts.
+#
+# Usage: zenbook-duo-rotate                run the daemon (started from autostart.lua)
+#        zenbook-duo-rotate <orientation>  apply one layout now (normal|left-up|right-up),
+#                                          works even while locked
+#        zenbook-duo-rotate lock           pause automatic rotation
+#        zenbook-duo-rotate unlock         resume it and apply the current sensor reading
+
+set -u
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zenbook-duo"
+STATE_FILE="$STATE_DIR/orientation"   # layout to show (read by zenbook-duo.lua)
+SENSOR_FILE="$STATE_DIR/sensor"       # last stable sensor reading (written by daemon)
+LOCK_FLAG="$STATE_DIR/rotation-locked"
+DOCKED_FILE="$STATE_DIR/docked"       # 1 = keyboard on the bottom screen
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/zenbook-duo"
+UNSAFE_FLAG="$RUNTIME_DIR/edp2-unsafe" # eDP-2 failed this boot: keep it off
+LAYOUT_LUA="$HOME/.config/hypr/zenbook-duo.lua"
+SETTLE_MS=1000                        # reading must hold this long before rotating
+DOCK_SETTLE_S=1                       # pogo pins can bounce
+# Kernel messages that mean the bottom panel's port (DDI B / PHY B) failed (xe #9196).
+EDP2_FAILURE='PHY B|DDI BUF B|Port B PLL|failed to retrieve link info'
+mkdir -p "$STATE_DIR" "$RUNTIME_DIR"
+
+valid() {
+  case "$1" in normal | left-up | right-up) return 0 ;; *) return 1 ;; esac
+}
+
+# Write the layout to show and ask Hyprland to apply it. Returns non-zero if
+# Hyprland didn't accept it (e.g. not ready yet), so the caller can retry.
+reload_layout() {
+  [[ $(hyprctl eval "dofile(\"$LAYOUT_LUA\")" 2>/dev/null) == ok ]]
+}
+
+apply() {
+  printf '%s\n' "$1" >"$STATE_FILE"
+  reload_layout
+}
+
+keyboard_docked() {
+  local d
+  for d in /sys/bus/usb/devices/*; do
+    [[ $(cat "$d/idVendor" 2>/dev/null) == 0b05 && $(cat "$d/idProduct" 2>/dev/null) == 1cd7 ]] && return 0
+  done
+  return 1
+}
+
+# Retry for a while: at login Hyprland may not answer yet.
+reload_layout_retry() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    reload_layout && return 0
+    sleep 1
+  done
+  return 1
+}
+
+mark_edp2_unsafe() {
+  touch "$UNSAFE_FLAG"
+  reload_layout_retry
+  notify-send -u critical "Zenbook Duo" "The bottom screen failed to start, so it stays off until the next full power-off. Power on with the keyboard lifted off it." 2>/dev/null
+}
+
+set_docked() {
+  local docked="$1" since
+  [[ $(cat "$DOCKED_FILE" 2>/dev/null) == "$docked" ]] && return 0
+  printf '%s\n' "$docked" >"$DOCKED_FILE"
+
+  if [[ $docked == 1 || -f $UNSAFE_FLAG ]]; then
+    reload_layout_retry
+    return
+  fi
+
+  # Undocked: turn eDP-2 back on, then make sure the kernel managed it.
+  since=$(date '+%Y-%m-%d %H:%M:%S')
+  reload_layout_retry
+  sleep 2
+  if journalctl -k --since "$since" --no-pager -q 2>/dev/null | grep -qE "$EDP2_FAILURE"; then
+    mark_edp2_unsafe
+    return
+  fi
+  # The firmware brings eDP-2 back at full brightness; match the top screen.
+  sync_bottom_brightness
+  sync_bottom_brightness_later
+}
+
+# --- Brightness ---------------------------------------------------------------
+# Omarchy's keys, OSD and idle dimming only drive intel_backlight (eDP-1). Mirror
+# it to the bottom panel, whose backlight is card<N>-eDP-2-backlight (N varies
+# between boots). Needs xe.enable_dpcd_backlight=1: the OLEDs ignore PWM.
+TOP_BACKLIGHT=/sys/class/backlight/intel_backlight
+
+edp2_enabled() {
+  [[ $(cat "$DOCKED_FILE" 2>/dev/null) != 1 && ! -f $UNSAFE_FLAG ]]
+}
+
+sync_bottom_brightness() {
+  edp2_enabled || return 0
+  local dev top tmax bmax
+  for dev in /sys/class/backlight/card*-eDP-2-backlight; do break; done
+  [[ -e $dev ]] || return 0
+  top=$(<"$TOP_BACKLIGHT/brightness") || return 0
+  tmax=$(<"$TOP_BACKLIGHT/max_brightness") || return 0
+  bmax=$(<"$dev/max_brightness") || return 0
+  ((tmax > 0)) || return 0
+  brightnessctl -q -d "${dev##*/}" set "$(((top * bmax + tmax / 2) / tmax))" 2>/dev/null
+}
+
+# The panel firmware resets eDP-2's brightness a few seconds after it powers on
+# (enable, boot, resume), so sync again once it has settled.
+sync_bottom_brightness_later() {
+  (sleep 1.5; sync_bottom_brightness; sleep 3.5; sync_bottom_brightness) &
+}
+
+follow_brightness() {
+  local line
+  while IFS= read -r line; do
+    [[ $line == *"/intel_backlight ("* ]] || continue
+    while IFS= read -r -t 0.1 line; do :; done # coalesce key-repeat bursts
+    sync_bottom_brightness
+  done < <(stdbuf -oL udevadm monitor --udev --subsystem-match=backlight 2>/dev/null)
+}
+
+follow_resume() {
+  local line
+  while IFS= read -r line; do
+    [[ $line == *"PrepareForSleep (false"* ]] && sync_bottom_brightness_later
+  done < <(stdbuf -oL gdbus monitor --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 2>/dev/null)
+}
+
+follow_keyboard() {
+  # The kernel failed to bring eDP-2 up at power-on (keyboard docked then):
+  # never try to enable it in this boot.
+  if journalctl -k -b --no-pager -q 2>/dev/null | grep -qE "$EDP2_FAILURE"; then
+    touch "$UNSAFE_FLAG"
+  fi
+
+  if keyboard_docked; then set_docked 1; else set_docked 0; fi
+  reload_layout_retry # also applies the unsafe flag at login
+
+  local line
+  while IFS= read -r line; do
+    # Wait until USB events stop for DOCK_SETTLE_S, then look at the result.
+    while IFS= read -r -t "$DOCK_SETTLE_S" line; do :; done
+    if keyboard_docked; then set_docked 1; else set_docked 0; fi
+  done < <(stdbuf -oL udevadm monitor --udev --subsystem-match=usb/usb_device 2>/dev/null)
+}
+
+case "${1:-}" in
+  lock)
+    touch "$LOCK_FLAG"
+    exit 0
+    ;;
+  unlock)
+    rm -f "$LOCK_FLAG" # the daemon applies the current reading within a second
+    exit 0
+    ;;
+  normal | left-up | right-up)
+    apply "$1"
+    exit
+    ;;
+  "") ;;
+  *)
+    echo "usage: $0 [normal|left-up|right-up|lock|unlock]" >&2
+    exit 1
+    ;;
+esac
+
+# Single instance per session.
+exec 9>"$STATE_DIR/daemon.lock"
+flock -n 9 || exit 0
+trap 'kill $(jobs -p) 2>/dev/null' EXIT
+trap 'exit 0' TERM INT
+
+# Keyboard watcher runs alongside the sensor loop; restart it if udevadm dies.
+( while true; do follow_keyboard; sleep 2; done ) &
+( while true; do follow_brightness; sleep 2; done ) &
+( while true; do follow_resume; sleep 2; done ) &
+sync_bottom_brightness_later # eDP-2 was just enabled at login
+
+# Daemon. `target` is the newest sensor reading, `since` when it first appeared,
+# `applied` what Hyprland last accepted. A reading is applied once it has held
+# for SETTLE_MS. It is (re)applied whenever it differs from what Hyprland
+# accepted (so a failed apply is retried every second) or from the layout in
+# STATE_FILE (so a manual layout is replaced by the sensor after `unlock`).
+applied=""
+
+now_ms() {
+  local t=${EPOCHREALTIME/[.,]/}
+  echo $((t / 1000))
+}
+
+follow_sensor() {
+  local target="" since=0 line o
+  while true; do
+    if IFS= read -r -t 1 line; then
+      case "$line" in
+        *"orientation changed: "*) o="${line##*orientation changed: }" ;;
+        *"(orientation: "*) o="${line##*(orientation: }"; o="${o%%,*}" ;;
+        *) continue ;;
+      esac
+      # bottom-up/undefined: ignore, keep the current layout
+      valid "$o" || continue
+      if [[ $o != "$target" ]]; then
+        target="$o"
+        since=$(now_ms)
+      fi
+    else
+      (($? > 128)) || return 0 # EOF: monitor-sensor exited
+    fi
+
+    [[ -n $target ]] || continue
+    (($(now_ms) - since >= SETTLE_MS)) || continue
+    [[ $(cat "$SENSOR_FILE" 2>/dev/null) == "$target" ]] || printf '%s\n' "$target" >"$SENSOR_FILE"
+    [[ -f $LOCK_FLAG ]] && continue
+    [[ $target != "$applied" || $(cat "$STATE_FILE" 2>/dev/null) != "$target" ]] || continue
+    apply "$target" && applied="$target"
+  done
+}
+
+# monitor-sensor exits if iio-sensor-proxy restarts; just start it again.
+while true; do
+  follow_sensor < <(stdbuf -oL monitor-sensor --accel 2>/dev/null)
+  applied="" # re-apply the first reading after a restart
+  sleep 2
+done

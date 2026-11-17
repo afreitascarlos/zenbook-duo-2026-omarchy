@@ -1,0 +1,4 @@
+
+# US International: ' + c = ç (instead of ć)
+<dead_acute> <c> : "ç" ccedilla
+<dead_acute> <C> : "Ç" Ccedilla

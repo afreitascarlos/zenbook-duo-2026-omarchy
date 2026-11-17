@@ -1,0 +1,16 @@
+# Zenbook Duo (zenbook-duo-omarchy-xe): download the xe/i915 sources of a new Omarchy
+# kernel before 70-dkms-install builds the patched xe. pacman runs hooks without network
+# access unless they ask for it; this one does, so the DKMS build only reads the cache.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/lib/modules/*/build/include/
+
+[Action]
+Description = Fetching xe sources for the Zenbook Duo patched driver...
+When = PostTransaction
+Depends = git
+NetworkAccess = allowed
+Exec = /usr/bin/bash -c 'for b in /usr/src/zenbook-duo-omarchy-xe-*/build.sh; do [[ -f $b ]] && exec /usr/bin/bash "$b" --fetch; done; exit 0'
+NeedsTargets

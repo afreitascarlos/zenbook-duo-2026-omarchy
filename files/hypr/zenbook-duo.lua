@@ -19,24 +19,62 @@
 -- would be drawn upside down and move the wrong way: use software cursors.
 -- If a future aquamarine starts resetting the plane rotation, the top screen
 -- flips: then go back to +180° on eDP-1 and drop no_hardware_cursors.
--- Logical size at scale 2: 1440x900 landscape, 900x1440 portrait.
+--
+-- Scale: each panel uses the scale on its own hl.monitor line in monitors.lua
+-- (where `omarchy hyprland monitor scaling` / Super+Alt+scale keys save it),
+-- default 2. Positions are computed from it, so any clean scale works
+-- (1.25 -> 2304x1440 logical, 2 -> 1440x900).
 
 hl.config({ cursor = { no_hardware_cursors = 1 } })
+
+-- Panel native mode (both panels are 2880x1800).
+local PANEL_W, PANEL_H = 2880, 1800
+
+-- Read `scale = N` from a one-line `hl.monitor({ output = "<name>", ... })` rule in
+-- monitors.lua. This file runs after those rules and must set the scale itself
+-- (it re-applies the whole monitor rule), so it re-uses the user's value.
+local function configured_scale(output)
+  local f = io.open(os.getenv("HOME") .. "/.config/hypr/monitors.lua", "r")
+  if not f then
+    return nil
+  end
+  local scale
+  for line in f:lines() do
+    local code = line:gsub("%-%-.*", "")
+    if code:match('^%s*hl%.monitor%(%s*{%s*output%s*=%s*"' .. output:gsub("%-", "%%-") .. '"') then
+      scale = tonumber(code:match("scale%s*=%s*([%d%.]+)")) or scale
+    end
+  end
+  f:close()
+  return scale
+end
+
+local scales = {}
+local size = {} -- logical size per output: { w, h } in landscape
+for _, output in ipairs({ "eDP-1", "eDP-2" }) do
+  local s = configured_scale(output)
+  if not s or s < 1 or s > 4 then
+    s = 2
+  end
+  scales[output] = s
+  size[output] = { math.ceil(PANEL_W / s), math.ceil(PANEL_H / s) }
+end
 
 local layouts = {
   ["normal"] = {
     { output = "eDP-1", position = "0x0", transform = 0 },
-    { output = "eDP-2", position = "0x900", transform = 0 },
+    { output = "eDP-2", position = "0x" .. size["eDP-1"][2], transform = 0 },
   },
   -- Positions verified by the user: in left-up the top screen (eDP-1) is
-  -- physically on the RIGHT, in right-up on the LEFT.
+  -- physically on the RIGHT, in right-up on the LEFT. Rotated, a panel's
+  -- logical width is its landscape height.
   ["left-up"] = {
     { output = "eDP-2", position = "0x0", transform = 1 },
-    { output = "eDP-1", position = "900x0", transform = 1 },
+    { output = "eDP-1", position = size["eDP-2"][2] .. "x0", transform = 1 },
   },
   ["right-up"] = {
     { output = "eDP-1", position = "0x0", transform = 3 },
-    { output = "eDP-2", position = "900x0", transform = 3 },
+    { output = "eDP-2", position = size["eDP-1"][2] .. "x0", transform = 3 },
   },
 }
 
@@ -88,7 +126,7 @@ for _, m in ipairs(layouts[orientation]) do
       disabled = false,
       mode = "preferred",
       position = m.position,
-      scale = 2,
+      scale = scales[m.output],
       transform = m.transform,
       -- 10-bit framebuffer: with zenbook-duo-dsc-10bit.service (forces DSC) the
       -- panels then run at 10 bpc instead of xe's default 6 bpc + dithering.

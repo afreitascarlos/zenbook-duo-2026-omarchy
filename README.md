@@ -102,7 +102,7 @@ Installs two files and hooks them into Omarchy's config.
 
 | Orientation | Layout |
 |---|---|
-| `normal` | Top screen eDP-1 above, bottom eDP-2 below, both transform 0 (the upside-down top panel is rotated in hardware, see `boot-orientation` below). Software cursor. Both at scale 2. |
+| `normal` | Top screen eDP-1 above, bottom eDP-2 below, both transform 0 (the upside-down top panel is rotated in hardware, see `boot-orientation` below). Software cursor. Scale per panel is read from its `hl.monitor` line in `monitors.lua` (what `omarchy hyprland monitor scaling` writes), default 2; positions follow the scale. |
 | `left-up` | Sideways, top screen on the right. |
 | `right-up` | Sideways, top screen on the left. |
 

@@ -9,7 +9,7 @@ Facts gathered while setting the laptop up. Kernel `7.2.15-1-omarchy`, BIOS `UX8
 | eDP-1 (top) | BOE NB140B9M-T01, 2880×1800 OLED | Mounted upside down: needs transform 2 in the normal position |
 | eDP-2 (bottom) | BOE NB140B9M-T02, 2880×1800 OLED | Display port B (DDI B / PHY B, a C20 PHY inside the Type-C subsystem) |
 
-- Both use scale 2, giving a logical size of 1440×900 each.
+- Default scale 2 (logical 1440×900 each); any clean scale set in `monitors.lua` works, e.g. 1.25 gives 2304×1440.
 - eDP-2 only appears if the firmware lit it at power-on, i.e. the keyboard was not lying on it (xe #9196). Otherwise the kernel logs `[ENCODER:520:DDI B/PHY B] failed to retrieve link info, disabling eDP` at boot, or `PHY B failed to request refclk` when it is enabled later.
 - **Backlight:** the OLEDs ignore PWM. Brightness needs `xe.enable_dpcd_backlight=1`, which gives DPCD brightness with a range of 0–504.
   - `intel_backlight` is eDP-1.

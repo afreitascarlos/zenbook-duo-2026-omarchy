@@ -19,7 +19,7 @@ Fixes and a small daemon that make the ASUS Zenbook Duo 2026 (UX8407AA, Intel Pa
 Optional (run by name, not part of `all`):
 
 - **Battery charge limit:** charge to 80% only, with a button in the Omarchy bar for a full charge during the next 24 hours, like MyASUS "Battery care mode" ([`charge-limit`](#charge-limit-optional-not-part-of-all))
-- US International keyboard layout with `'` + `c` = `ç` ([`keyboard-intl`](#keyboard-intl-optional-not-part-of-all))
+- **US International keyboard:** US layout with accents on dead keys, and `'` + `c` = `ç` instead of `ć`, for writing Portuguese and other accented languages ([`keyboard-intl`](#keyboard-intl-optional-not-part-of-all))
 - **Visible boot menu:** always show the Limine menu for 4 s instead of Omarchy's hidden one, handy for dual boot with Windows ([`limine-menu`](#limine-menu-optional-not-part-of-all))
 
 > **Based on [burakgon/zenbook-duo-2026-linux](https://github.com/burakgon/zenbook-duo-2026-linux).** Almost all of the hardware work here comes from burakgon's project: the research, the kernel patches, the patched keyboard driver and the fixes for sensors, touchpad, cursor and sleep. His project targets KDE Plasma. This one adapts his fixes to Omarchy (Arch + Hyprland), replaces the KDE parts with Hyprland equivalents, and adds a few changes of its own. If his work helped you, go give his repo a star. See [Credits](#credits) for details.
@@ -39,6 +39,7 @@ cd zenbook-duo-2026-omarchy
 ./install.sh all           # run them all, or name steps: ./install.sh packages raydium ...
 ./install.sh charge-limit  # optional: 80% battery charge limit + bar button
 ./install.sh limine-menu   # optional: always show the boot menu (dual boot)
+./install.sh keyboard-intl # optional: US International layout + ç
 ```
 
 Tip: take a restore point first with `omarchy-snapshot create`. It appears in the Limine boot menu; boot it and run `omarchy-snapshot restore` to go back.
@@ -70,6 +71,7 @@ Every step is safe to run again. Steps that change the system use `sudo`.
 | CPU power limits per profile (Windows DTT values) | ✅ Omarchy default (thermald) | — |
 | Keyboard over Bluetooth | ✅ after pairing | [manual](#manual-steps) |
 | Boot menu always visible (dual boot with Windows) | ✅ optional | `limine-menu` |
+| US International keyboard with `'` + `c` = `ç` | ✅ optional | `keyboard-intl` |
 | Disk password screen (Plymouth) upside down at power-on | ✅ fixed | `boot-orientation` |
 | Detached (Bluetooth) keyboard at the disk password | ❌ by design | [known issues](#known-issues) |
 | Bottom screen after powering on with keyboard on it | ✅ fixed | `edp2-xe` |
@@ -221,7 +223,12 @@ Adds `xe.enable_dpcd_backlight=1` to `/etc/default/limine` (backup `limine.bak.z
 - **Undo:** `sudo cp /boot/limine.conf.bak.zenbook-duo /boot/limine.conf`, or set `quiet: yes` again.
 
 ### `keyboard-intl` (optional, not part of `all`)
-US International layout, plus an `~/.XCompose` rule so `'` + `c` gives `ç` instead of `ć`. Useful for writing Portuguese on a US keyboard.
+For writing Portuguese (or other accented languages) on the Duo's US keyboard.
+- **Layout:** US International (`us`, variant `intl`), saved to `~/.config/omarchy/keyboard-layouts`, which Omarchy's Hyprland config reads instead of the layout picked at install time. A different existing file is backed up to `keyboard-layouts.bak.zenbook-duo-keyboard`.
+- **Dead keys:** `'` `"` `` ` `` `~` `^` combine with the next letter (`'` + `a` = `á`, `~` + `a` = `ã`). For the symbol itself, press the key followed by Space.
+- **`ç`:** US International gives `ć` for `'` + `c`. A rule appended to `~/.XCompose` (only if missing) makes it `ç` / `Ç`. `AltGr` + `,` also gives `ç`.
+- Applied after a Hyprland reload (`hyprctl reload`) and restart of the compose service (the step runs `omarchy-restart-xcompose`).
+- **Undo:** delete `~/.config/omarchy/keyboard-layouts` (or restore the backup), remove the two `ç` lines from `~/.XCompose`, then `hyprctl reload` and `omarchy-restart-xcompose`.
 
 ### `charge-limit` (optional, not part of `all`)
 Replaces MyASUS "Battery care mode" + "Instant full charge".

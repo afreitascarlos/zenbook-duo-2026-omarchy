@@ -34,8 +34,12 @@ step_packages() {
 
 step_keyboard_intl() {
 	say "keyboard-intl (optional): US International layout + ' c = ç (for Portuguese on a US keyboard)"
+	local layouts=~/.config/omarchy/keyboard-layouts
 	mkdir -p ~/.config/omarchy
-	cp "$F/keyboard/keyboard-layouts" ~/.config/omarchy/keyboard-layouts
+	if [[ -f $layouts ]] && ! cmp -s "$F/keyboard/keyboard-layouts" "$layouts"; then
+		cp "$layouts" "$layouts.bak.zenbook-duo-keyboard"
+	fi
+	cp "$F/keyboard/keyboard-layouts" "$layouts"
 	if ! grep -q 'dead_acute> <c>' ~/.XCompose 2>/dev/null; then
 		cat "$F/keyboard/xcompose-ccedilla" >>~/.XCompose
 	fi

@@ -1,0 +1,1 @@
+USERNAME ALL=(root) NOPASSWD: /usr/local/bin/battery-charge-limit toggle, /usr/local/bin/battery-charge-limit boost, /usr/local/bin/battery-charge-limit cancel

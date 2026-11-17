@@ -15,6 +15,12 @@ Fixes and a small daemon that make the ASUS Zenbook Duo 2026 (UX8407AA, Intel Pa
 - 10-bit colour on both panels
 - Lid close with the keyboard docked: the laptop stays asleep
 - A visible boot menu for dual boot with Windows
+- A power-saver profile that really saves power, and lower idle power
+
+Optional (run by name, not part of `all`):
+
+- **Battery charge limit:** charge to 80% only, with a button in the Omarchy bar for a full charge during the next 24 hours, like MyASUS "Battery care mode" ([`charge-limit`](#charge-limit-optional-not-part-of-all))
+- US International keyboard layout with `'` + `c` = `ç` ([`keyboard-intl`](#keyboard-intl-optional-not-part-of-all))
 
 > **Based on [burakgon/zenbook-duo-2026-linux](https://github.com/burakgon/zenbook-duo-2026-linux).** Almost all of the hardware work here comes from burakgon's project: the research, the kernel patches, the patched keyboard driver and the fixes for sensors, touchpad, cursor and sleep. His project targets KDE Plasma. This one adapts his fixes to Omarchy (Arch + Hyprland), replaces the KDE parts with Hyprland equivalents, and adds a few changes of its own. If his work helped you, go give his repo a star. See [Credits](#credits) for details.
 
@@ -31,6 +37,7 @@ git clone https://github.com/<you>/zenbook-duo-2026-omarchy
 cd zenbook-duo-2026-omarchy
 ./install.sh list          # show the steps
 ./install.sh all           # run them all, or name steps: ./install.sh packages raydium ...
+./install.sh charge-limit  # optional: 80% battery charge limit + bar button
 ```
 
 Tip: take a restore point first with `omarchy-snapshot create`. It appears in the Limine boot menu; boot it and run `omarchy-snapshot restore` to go back.
@@ -58,6 +65,7 @@ Every step is safe to run again. Steps that change the system use `sudo`.
 | Lid close with keyboard docked: stays asleep | ✅ fixed | `kbd-lid-wake` |
 | Power-saver profile really saves power (quiet fans, SoC low-power, GPU power saving) | ✅ fixed | `power-profile-sync` |
 | Idle platform devices kept powered on | ✅ fixed (small gain) | `runtime-pm` |
+| Battery charge limit 80% + 24 h full charge from the bar | ✅ optional | `charge-limit` |
 | CPU power limits per profile (Windows DTT values) | ✅ Omarchy default (thermald) | — |
 | Keyboard over Bluetooth | ✅ after pairing | [manual](#manual-steps) |
 | Boot menu with Windows entry | ✅ | `limine-menu` |
@@ -212,6 +220,26 @@ Adds `xe.enable_dpcd_backlight=1` to `/etc/default/limine` (backup `limine.bak.z
 ### `keyboard-intl` (optional, not part of `all`)
 US International layout, plus an `~/.XCompose` rule so `'` + `c` gives `ç` instead of `ć`. Useful for writing Portuguese on a US keyboard.
 
+### `charge-limit` (optional, not part of `all`)
+Replaces MyASUS "Battery care mode" + "Instant full charge".
+- The battery charges to **80%** only (`charge_control_end_threshold` of `asus-wmi`, on `BAT0`).
+- A button in the Omarchy bar (next to the indicators, left of the clock) allows **100% for 24 hours**. Afterwards the 80% limit comes back by itself. Clicking again during the 24 h goes back to 80% right away.
+- The limit is applied again at boot and after every resume, since ASUS firmware can reset it to 100%.
+- Pieces:
+
+  | Piece | Path |
+  |---|---|
+  | Script (`status` / `apply` / `boost` / `cancel` / `toggle`) | `/usr/local/bin/battery-charge-limit` |
+  | Boost end time | `/var/lib/battery-charge-limit/boost-until` |
+  | Boot + resume service | `/etc/systemd/system/battery-charge-limit.service` |
+  | End of boost | transient `battery-charge-limit-restore.timer` (`systemd-run`; created again at boot) |
+  | No password for the widget (`toggle`/`boost`/`cancel` only) | `/etc/sudoers.d/battery-charge-limit` |
+  | Bar widget | `~/.config/omarchy/plugins/zenbook-duo.charge-limit/` + entry in `~/.config/omarchy/shell.json` (`bar.layout.centerBegin`, backup `shell.json.bak.zenbook-duo-charge-limit`) |
+
+- Widget: `󰂁` dimmed while limited, hidden until the pointer is over the bar centre (like the indicators); `󰂅` highlighted and always shown during the boost. The tooltip says what a click does.
+- Not a udev rule on purpose: the battery can register after the rule runs.
+- **Check:** `battery-charge-limit status` → `{"limit":80,"threshold":80,"boostUntil":0}`.
+
 ## Manual steps
 
 1. **Pair the keyboard over Bluetooth**, so it keeps working when lifted off the screen:
@@ -252,6 +280,8 @@ files/systemd/                → /etc/systemd/system/
 files/system-sleep/           → /usr/lib/systemd/system-sleep/
 files/power/                  → /usr/local/lib/zenbook-duo/
 files/udev/                   → /etc/udev/rules.d/
+files/battery/                → /usr/local/bin/, /etc/sudoers.d/ (optional charge-limit)
+files/omarchy-plugin/         → ~/.config/omarchy/plugins/ (charge-limit bar widget)
 docs/hardware.md              devices, IDs and findings
 docs/log.md                   what was done, in order, including dead ends
 ```
@@ -273,7 +303,7 @@ This project would not exist without **[burakgon/zenbook-duo-2026-linux](https:/
 | `runtime-pm` | [`power-runtime-pm`](https://github.com/burakgon/zenbook-duo-2026-linux/tree/main/modules/power-runtime-pm), unchanged |
 | `raydium`, `brightness`, rotation | his hardware report: the touchscreen driver conflict, DPCD backlight, the accelerometer mount matrix, and the keyboard USB/Bluetooth IDs |
 
-Written for this project: the Hyprland side (`zenbook-duo.lua`, the `zenbook-duo-rotate` daemon for rotation, keyboard dock and brightness sync), `install.sh`, the Omarchy-kernel `xe` rebuild and its safety check, and the Fn-lock change.
+Written for this project: the Hyprland side (`zenbook-duo.lua`, the `zenbook-duo-rotate` daemon for rotation, keyboard dock and brightness sync), `install.sh`, the Omarchy-kernel `xe` rebuild and its safety check, the Fn-lock change, and the battery charge limit with its bar widget (`charge-limit`, first written on a Zenbook S14).
 
 - The ISH firmware belongs to ASUS and Intel and is downloaded from ASUS at install time.
 

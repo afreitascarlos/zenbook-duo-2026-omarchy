@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply the battery charge limit (80%, or 100% during a 24 h boost)
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/battery-charge-limit apply
+
+# WantedBy the sleep targets + After= them: runs again after every resume, because
+# ASUS firmware may reset the threshold to 100 after a power cycle.
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

@@ -14,7 +14,7 @@ F="$HERE/files"
 
 # "all" runs STEPS; OPTIONAL steps only run when named.
 STEPS=(packages raydium ish-firmware hyprland brightness boot-orientation limine-menu hid-asus edp2-xe touchpad-palm psr-et-off dsc-10bit kbd-lid-wake power-profile-sync runtime-pm)
-OPTIONAL=(keyboard-intl)
+OPTIONAL=(keyboard-intl charge-limit)
 
 say() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
@@ -41,6 +41,38 @@ step_keyboard_intl() {
 	fi
 	command -v omarchy-restart-xcompose >/dev/null && omarchy-restart-xcompose || true
 	note "Layout is read by Hyprland on reload (hyprland step reloads it)."
+}
+
+step_charge_limit() {
+	say "charge-limit (optional): charge the battery to 80% only, bar button for a 24 h full charge"
+	if ! ls /sys/class/power_supply/BAT*/charge_control_end_threshold >/dev/null 2>&1; then
+		note "No BAT*/charge_control_end_threshold (asus-wmi not loaded?). Skipping."
+		return 0
+	fi
+	sudo install -D -m 0755 "$F/battery/battery-charge-limit" /usr/local/bin/battery-charge-limit
+	sudo install -m 0644 "$F/systemd/battery-charge-limit.service" /etc/systemd/system/battery-charge-limit.service
+	# Lets the bar widget toggle the boost without a password (only toggle/boost/cancel).
+	local tmp
+	tmp=$(mktemp)
+	sed "s/^USERNAME /$USER /" "$F/battery/battery-charge-limit.sudoers" >"$tmp"
+	sudo visudo -cf "$tmp" >/dev/null
+	sudo install -D -m 0440 "$tmp" /etc/sudoers.d/battery-charge-limit
+	rm -f "$tmp"
+	sudo systemctl daemon-reload
+	sudo systemctl enable battery-charge-limit.service
+	sudo systemctl start battery-charge-limit.service
+	# Bar widget: plugin folder + entry right after the indicators, left of the clock.
+	mkdir -p ~/.config/omarchy/plugins
+	rm -rf ~/.config/omarchy/plugins/zenbook-duo.charge-limit
+	cp -r "$F/omarchy-plugin/zenbook-duo.charge-limit" ~/.config/omarchy/plugins/
+	local cfg=~/.config/omarchy/shell.json
+	if [[ -f $cfg ]] && ! jq -e '.. | objects | select(.id? == "zenbook-duo.charge-limit")' "$cfg" >/dev/null; then
+		cp "$cfg" "$cfg.bak.zenbook-duo-charge-limit"
+		jq '.bar.layout.centerBegin = ((.bar.layout.centerBegin // [{"id": "omarchy.indicators"}]) + [{"id": "zenbook-duo.charge-limit"}])' \
+			"$cfg.bak.zenbook-duo-charge-limit" >"$cfg"
+	fi
+	command -v omarchy >/dev/null && omarchy restart shell >/dev/null 2>&1 || true
+	note "Now: $(battery-charge-limit status)"
 }
 
 step_raydium() {

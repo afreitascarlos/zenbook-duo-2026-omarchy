@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "zenbook-duo.charge-limit",
+  "name": "Charge Limit",
+  "version": "1.0.0",
+  "author": "zenbook-duo-2026-omarchy",
+  "license": "GPL-2.0",
+  "description": "Battery charge limit (80%) with a one-click full charge for 24 hours",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "ChargeLimit.qml"
+  },
+  "barWidget": {
+    "displayName": "Charge Limit",
+    "description": "Battery charge limit (80%) with a one-click full charge for 24 hours",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

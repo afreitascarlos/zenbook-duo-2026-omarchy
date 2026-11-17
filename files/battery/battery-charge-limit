@@ -1,0 +1,118 @@
+#!/bin/bash
+# Limit the battery charge (asus-wmi charge_control_end_threshold) and allow a
+# temporary full charge, like MyASUS "Battery care mode" + "Instant full charge".
+#
+#   battery-charge-limit status   JSON with the limit, current threshold and boost end
+#   battery-charge-limit apply    (root) apply the saved state; run at boot and after resume
+#   battery-charge-limit boost    (root) charge to 100% for the next 24 h
+#   battery-charge-limit cancel   (root) back to the limit right away
+#   battery-charge-limit toggle   (root) switch between boost and limit
+#
+# Do not use a udev rule for this: the battery can register after the rule runs.
+# The systemd service (boot + resume) with a retry loop is reliable.
+
+set -euo pipefail
+
+SELF=/usr/local/bin/battery-charge-limit
+LIMIT=80
+BOOST_SECONDS=$((24 * 60 * 60))
+STATE_DIR=/var/lib/battery-charge-limit
+BOOST_UNTIL="$STATE_DIR/boost-until"
+RESTORE_UNIT=battery-charge-limit-restore
+
+# Find the internal battery's threshold file. At boot asus-wmi may register the
+# battery a little later, so retry. Other power supplies (keyboard, USB-C) lack it.
+threshold_path() {
+	local attempts=${1:-1} f
+	for ((i = 0; i < attempts; i++)); do
+		for f in /sys/class/power_supply/BAT*/charge_control_end_threshold; do
+			[[ -e $f ]] && { echo "$f"; return 0; }
+		done
+		((i + 1 < attempts)) && sleep 0.5
+	done
+	echo "battery-charge-limit: charge_control_end_threshold not found" >&2
+	return 1
+}
+
+boost_until() {
+	local value=0
+	[[ -r $BOOST_UNTIL ]] && value=$(<"$BOOST_UNTIL")
+	[[ $value =~ ^[0-9]+$ ]] || value=0
+	echo "$value"
+}
+
+require_root() {
+	if ((EUID != 0)); then
+		echo "battery-charge-limit: '$1' must run as root" >&2
+		exit 1
+	fi
+}
+
+write_threshold() {
+	local path
+	path=$(threshold_path 20)
+	for _ in {1..20}; do
+		[[ -w $path ]] && break
+		sleep 0.5
+	done
+	echo "$1" >"$path"
+}
+
+cancel_restore_timer() {
+	systemctl stop "$RESTORE_UNIT.timer" 2>/dev/null || true
+	systemctl reset-failed "$RESTORE_UNIT.timer" "$RESTORE_UNIT.service" 2>/dev/null || true
+}
+
+apply() {
+	local until now
+	until=$(boost_until)
+	now=$(date +%s)
+
+	cancel_restore_timer
+
+	if ((until > now)); then
+		write_threshold 100
+		# Transient timer; lost on reboot, but the boot run of 'apply' creates it again.
+		systemd-run --quiet --unit="$RESTORE_UNIT" \
+			--on-calendar="@$until" --timer-property=AccuracySec=1min \
+			"$SELF" apply
+	else
+		rm -f "$BOOST_UNTIL"
+		write_threshold "$LIMIT"
+	fi
+}
+
+boost() {
+	mkdir -p "$STATE_DIR"
+	echo $(($(date +%s) + BOOST_SECONDS)) >"$BOOST_UNTIL"
+	apply
+}
+
+cancel() {
+	rm -f "$BOOST_UNTIL"
+	apply
+}
+
+status() {
+	local until current path
+	until=$(boost_until)
+	((until > $(date +%s))) || until=0
+	path=$(threshold_path 1)
+	current=$(<"$path")
+	printf '{"limit":%d,"threshold":%d,"boostUntil":%d}\n' "$LIMIT" "$current" "$until"
+}
+
+case "${1:-status}" in
+status) status ;;
+apply) require_root apply; apply ;;
+boost) require_root boost; boost ;;
+cancel) require_root cancel; cancel ;;
+toggle)
+	require_root toggle
+	if (($(boost_until) > $(date +%s))); then cancel; else boost; fi
+	;;
+*)
+	echo "Usage: battery-charge-limit [status|apply|boost|cancel|toggle]" >&2
+	exit 1
+	;;
+esac

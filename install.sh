@@ -187,6 +187,10 @@ step_edp2_xe() {
 	sudo dkms add -m $name -v $ver 2>/dev/null || true
 	sudo dkms install -m $name -v $ver -k "$k"
 	sudo install -D -m 0644 "$F/pacman-hooks/65-zenbook-duo-omarchy-xe-sources.hook" /etc/pacman.d/hooks/65-zenbook-duo-omarchy-xe-sources.hook
+	# Only a pacman that sandboxes hooks knows NetworkAccess; 7.1 rejects it and fails every transaction.
+	if grep -q -a 'NetworkAccess' /usr/lib/libalpm.so; then
+		sudo sed -i 's/^Depends = git$/&\nNetworkAccess = allowed/' /etc/pacman.d/hooks/65-zenbook-duo-omarchy-xe-sources.hook
+	fi
 	sudo install -D -m 0644 "$F/mkinitcpio.conf.d/zenbook-duo-omarchy-xe.conf" /etc/mkinitcpio.conf.d/zenbook-duo-omarchy-xe.conf
 	NEED_LIMINE_UPDATE=1
 	note "After the reboot: cat /sys/module/xe/parameters/zenbook_duo_edp2_tcss  (Y = fix active)"

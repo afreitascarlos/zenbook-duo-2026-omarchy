@@ -15,8 +15,8 @@
 # differences are the functions the fix adds. Any other difference fails the build,
 # and the stock xe stays in use.
 #
-# pacman runs hooks (DKMS included) without network access, so a pacman hook with
-# NetworkAccess=allowed runs --fetch first and the DKMS build only reads the cache.
+# A pacman hook (65-...-sources.hook) runs --fetch first and the DKMS build only reads the
+# cache, so the build works offline and in case a pacman sandboxes hooks.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 cache="${ZDX_CACHE:-/var/cache/zenbook-duo-omarchy-xe}"

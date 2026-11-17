@@ -1,6 +1,8 @@
 # Zenbook Duo (zenbook-duo-omarchy-xe): download the xe/i915 sources of a new Omarchy
-# kernel before 70-dkms-install builds the patched xe. pacman runs hooks without network
-# access unless they ask for it; this one does, so the DKMS build only reads the cache.
+# kernel before 70-dkms-install builds the patched xe, so the DKMS build only reads the cache.
+# Arch's pacman 7.1 only sandboxes downloads, so hooks have network access, and it rejects
+# a 'NetworkAccess' option ("invalid option", the whole transaction fails). install.sh adds
+# 'NetworkAccess = allowed' only if the installed libalpm knows that option.
 [Trigger]
 Operation = Install
 Operation = Upgrade
@@ -11,6 +13,5 @@ Target = usr/lib/modules/*/build/include/
 Description = Fetching xe sources for the Zenbook Duo patched driver...
 When = PostTransaction
 Depends = git
-NetworkAccess = allowed
 Exec = /usr/bin/bash -c 'for b in /usr/src/zenbook-duo-omarchy-xe-*/build.sh; do [[ -f $b ]] && exec /usr/bin/bash "$b" --fetch; done; exit 0'
 NeedsTargets

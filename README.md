@@ -61,7 +61,7 @@ Every step is safe to run again. Steps that change the system use `sudo`.
 | OLED brightness, both screens in sync | ✅ | `brightness`, `hyprland` |
 | Brightness / Fn keys, keyboard backlight, mic LED | 🧪 installed, testing | `hid-asus` |
 | Fn-lock: F1–F12 by default, Fn+Esc toggles | ✅ fixed | `hid-asus` |
-| Touchpad palm rejection / disable-while-typing | 🧪 installed, testing | `touchpad-palm` |
+| Touchpad palm rejection / disable-while-typing | ✅ fixed | `touchpad-palm` |
 | Ghost / flickering cursor on the top screen | ✅ fixed | `psr-et-off` |
 | 10-bit colour on both OLED panels (was 6-bit + dithering) | ✅ | `dsc-10bit`, `hyprland` |
 | Lid close with keyboard docked: stays asleep | ✅ fixed | `kbd-lid-wake` |

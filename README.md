@@ -33,7 +33,7 @@ Optional (run by name, not part of `all`):
 On a fresh Omarchy install:
 
 ```sh
-git clone https://github.com/<you>/zenbook-duo-2026-omarchy
+git clone https://github.com/afreitascarlos/zenbook-duo-2026-omarchy
 cd zenbook-duo-2026-omarchy
 ./install.sh list          # show the steps
 ./install.sh all           # run them all, or name steps: ./install.sh packages raydium ...

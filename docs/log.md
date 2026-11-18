@@ -27,7 +27,7 @@ What was done, in order, including what didn't work. Newest at the bottom.
   - The keys changed `intel_backlight` but nothing visible happened (OLED ignores PWM).
   - Added `xe.enable_dpcd_backlight=1`, after which the top screen works.
   - Added mirroring to eDP-2: the daemon follows `intel_backlight` changes through udev backlight events and re-syncs after enable and resume. Verified.
-- **Dual boot:** added the Windows entry with `limine-scan`, and set `timeout: 4`.
+- **Dual boot:** added the Windows entry with `limine-scan`, and set `timeout: 4`. **Verified** by the user: Windows boots from the Limine menu.
 
 ## 2026-11-17
 
